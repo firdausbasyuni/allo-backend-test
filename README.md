@@ -1,116 +1,313 @@
-# Allo Bank Backend Developer Take-Home Test
+# Split Bill API
 
-Welcome, and thank you for your interest in joining Allo Bank Engineering!
+A RESTful API built with Java 21 and Spring Boot for managing shared expenses, splitting bills among participants, recording repayments, and calculating settlement transfers.
 
-This challenge is intentionally open-ended. There is no skeleton, no guided steps, and no single correct answer. We want to see how you think, how you structure a solution, and what you consider important in production-grade code.
+## Features
 
----
+- Create bill groups with multiple participants.
+- Record expenses using equal, percentage-based, or exact-amount splits.
+- Calculate participant balances and settlement transfers.
+- Record repayments and automatically reflect them in outstanding balances.
+- Calculate a personalized service charge based on the configured GitHub username.
+- Validate expense amounts, split totals, participant membership, and repayments.
+- Maintain an audit trail for expense and payment creation.
+- Use `BigDecimal` for monetary calculations.
 
-## The Challenge: Split Bill API
+## Tech Stack
 
-Build a **Spring Boot REST API** that helps a group of people manage shared expenses and calculate who owes whom at the end.
+- Java 21
+- Spring Boot 3.5.6
+- Maven
+- Spring Data JPA / Hibernate
+- PostgreSQL
+- JUnit 5 and Mockito
+- Docker multi-stage build
 
-Think of a real scenario: a group trip, a team lunch, a shared apartment. People take turns paying for things, and at the end someone needs to figure out the fairest way to settle up.
+## Prerequisites
 
-**Your API should, at minimum, support:**
+- Java 21 or later
+- PostgreSQL
+- Maven, or the included Maven Wrapper
+- Docker (optional)
 
-1. Creating a bill group with a name and a list of participants
-2. Adding expenses to a group — who paid, how much, and who it was for
-3. Retrieving a settlement summary — a clear breakdown of who owes whom and how much
+## Configuration
 
-Everything else is up to you.
+Create a PostgreSQL database named `splitbill`.
 
----
+The application configuration is located in `src/main/resources/application.properties`.
 
-## Technical Requirements
+Default local configuration:
 
-These are non-negotiable:
+```properties
+spring.application.name=splitbill
+server.port=4110
 
-- **Java 17+**, **Spring Boot**, **Maven**
-- **`BigDecimal`** for all monetary values — no `float` or `double`
-- **A `Dockerfile`** using a multi-stage build (see `Dockerfile.template` in this repo)
-- At least **one unit test** covering your settlement calculation logic
-- A **`README.md`** in your submission with:
-  - How to build and run your project
-  - Example `curl` commands for each endpoint
-  - Your **GitHub username** and your calculated **service charge** value (see Personalization section below)
-  - Answer to the submission question (see below)
+spring.datasource.url=${DB_URL:jdbc:postgresql://localhost:5432/splitbill}
+spring.datasource.username=${DB_USERNAME:${USER}}
+spring.datasource.password=${DB_PASSWORD:}
 
----
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.open-in-view=false
 
-## Personalization
+app.github-username=firdausbasyuni
+```
 
-Every settlement response must include two additional fields: `service_charge_pct` and `service_charge_amount`.
+Set `DB_USERNAME` and `DB_PASSWORD` to match your PostgreSQL credentials if necessary.
 
-The `service_charge_pct` is unique to you and is calculated as follows:
+Hibernate automatically updates the database schema in this development configuration. For production environments, use a controlled database migration strategy.
 
-1. Take your GitHub username in **lowercase**
-2. Sum the Unicode (ASCII) values of all characters
-3. `service_charge_pct = (sum % 10)` — this gives a value between 0 and 9 (representing a percentage)
+## Build and Run
 
-**Example:** GitHub username `johndoe47`
-- Unicode sum: `106+111+104+110+100+111+101+52+55` = `850`
-- `service_charge_pct = 850 % 10` = **0** (0%)
+Clone the repository and navigate to the project directory:
 
-The `service_charge_amount` is this percentage applied to the total group expenses.
+```bash
+git clone https://github.com/<your-github-username>/allo-backend-test.git
+cd allo-backend-test
+```
 
-Include both fields in your settlement response. This value must be computed in code — do not hardcode it.
+Run the tests:
 
----
+```bash
+./mvnw clean test
+```
 
-## Show Your Skills
+Build the application:
 
-The minimum requirements get you through the door. What you build beyond that is how you stand out.
+```bash
+./mvnw clean package
+```
 
-Some directions to explore — pick what interests you, or invent your own:
+Start the application:
 
-- **Multiple split strategies** — equal split, split by percentage, split by exact amount per person
-- **Settlement optimization** — minimize the total number of transactions needed to settle all debts
-- **Payment recording** — mark a debt as paid and update outstanding balances
-- **Expense categories** — tag expenses (food, transport, accommodation) and show per-category summaries
-- **Audit trail** — track when expenses and payments were added
+```bash
+./mvnw spring-boot:run
+```
 
-There is no bonus point checklist. We are looking at the quality of what you choose to build, not the quantity.
+The API runs at `http://localhost:4110`.
 
----
+## API Endpoints
 
-## Submission Question
+### 1. Create a Bill Group
 
-In your `README.md`, answer the following in a short paragraph (3–5 sentences):
+**Endpoint:** `POST /api/groups`
 
-> **"What was the hardest design decision you made while building this, and what trade-off did you accept?"**
+Example request:
 
-There is no wrong answer. We ask this because it tells us more about how you think than the code itself.
+```bash
+curl -i -X POST http://localhost:4110/api/groups \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Dinner Test",
+    "participants": ["Firdaus", "Andi", "Budi"]
+  }'
+```
 
----
+Example response (`201 Created`):
 
-## Submission Process
+```json
+{
+  "id": 2,
+  "name": "Dinner Test",
+  "createdAt": "2026-10-25T19:21:53.23522",
+  "participants": [
+    { "id": 4, "name": "Firdaus" },
+    { "id": 5, "name": "Andi" },
+    { "id": 6, "name": "Budi" }
+  ]
+}
+```
 
-1. **Create a private GitHub repository** for your solution
-2. **Add `allobankdev` as a collaborator** (Settings → Collaborators → Add people)
-3. **Include a `Dockerfile`** in the root of your project (see `Dockerfile.template`)
-4. **Submit via the form:** [Click Here](https://forms.gle/kFrPQZ3hf9aQ1CfB9)
+IDs are generated by the database and may differ between executions. Use the IDs returned by your request in subsequent calls.
 
-   The form will ask for:
-   - Your full name and contact details
-   - Your private GitHub repository URL
-   - Your GitHub username (for personalization verification)
+### 2. Add an Expense
 
-> Do not open a Pull Request to this repository. Submissions are private.
+**Endpoint:** `POST /api/groups/{groupId}/expenses`
 
----
+The request uses `paidById`, `splitType`, and `splits`. Each split identifies a participant and provides the field required by the selected strategy.
 
-## What We Look For
+#### Equal split
 
-| Area | What it signals |
-|---|---|
-| Data modeling | How you think about domain entities and relationships |
-| API design | Clarity, consistency, and REST conventions |
-| Monetary handling | Awareness of precision issues in financial systems |
-| Code structure | Separation of concerns, readability, maintainability |
-| Testing | What you consider worth testing and why |
-| Submission answer | Genuine engagement with the problem |
+```bash
+curl -i -X POST http://localhost:4110/api/groups/2/expenses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paidById": 4,
+    "amount": 300000.00,
+    "description": "Dinner",
+    "splitType": "EQUAL",
+    "splits": [
+      {"participantId": 4},
+      {"participantId": 5},
+      {"participantId": 6}
+    ]
+  }'
+```
 
-We review every submission before the interview. The interview will include questions directly about your code — be ready to walk through it and extend it live.
+#### Percentage split
 
-Good luck!
+```json
+{
+  "paidById": 4,
+  "amount": 300000.0,
+  "description": "Dinner",
+  "splitType": "PERCENTAGE",
+  "splits": [
+    { "participantId": 4, "percentage": 50.0 },
+    { "participantId": 5, "percentage": 30.0 },
+    { "participantId": 6, "percentage": 20.0 }
+  ]
+}
+```
+
+Percentage values must total exactly `100`.
+
+#### Exact-amount split
+
+```json
+{
+  "paidById": 4,
+  "amount": 300000.0,
+  "description": "Dinner",
+  "splitType": "EXACT_AMOUNT",
+  "splits": [
+    { "participantId": 4, "shareAmount": 150000.0 },
+    { "participantId": 5, "shareAmount": 90000.0 },
+    { "participantId": 6, "shareAmount": 60000.0 }
+  ]
+}
+```
+
+Exact share amounts must total the expense amount. Each participant must belong to the specified group.
+
+### 3. Retrieve Settlement Summary
+
+**Endpoint:** `GET /api/groups/{groupId}/settlement`
+
+```bash
+curl -i http://localhost:4110/api/groups/2/settlement
+```
+
+The response includes total expenses, the service charge, participant balances, and suggested settlement transfers.
+
+A positive `netBalance` means the participant is owed money. A negative `netBalance` means the participant owes money.
+
+For example, if Firdaus pays `300000.00` for an expense shared equally among three participants, the initial balances are:
+
+- Firdaus: `+200000.00`
+- Andi: `-100000.00`
+- Budi: `-100000.00`
+
+The resulting transfers are Andi → Firdaus for `100000.00` and Budi → Firdaus for `100000.00`.
+
+The service charge is reported separately and is not included in the peer-to-peer settlement transfers.
+
+### 4. Record a Repayment
+
+**Endpoint:** `POST /api/groups/{groupId}/payments`
+
+```bash
+curl -i -X POST http://localhost:4110/api/groups/2/payments \
+  -H "Content-Type: application/json" \
+  -d '{
+    "paidById": 5,
+    "paidToId": 4,
+    "amount": 40000.00,
+    "description": "Partial repayment"
+  }'
+```
+
+The request records a payment from one participant to another within the specified group.
+
+The API validates that:
+
+- The group exists.
+- Both participants belong to the group.
+- The payer and recipient are different participants.
+- The amount is positive and has no more than two decimal places.
+
+A successful request returns `201 Created`.
+
+Recorded repayments are included in subsequent settlement calculations. For example, a repayment of `40000.00` from Andi to Firdaus reduces Andi's outstanding debt from `100000.00` to `60000.00`.
+
+## Service Charge Calculation
+
+**Configured GitHub username:** `firdausbasyuni`
+
+The service charge percentage is calculated by converting the lowercase GitHub username's characters to their character codes, summing them, and taking the result modulo 10.
+
+```text
+Username: firdausbasyuni
+Sum of character codes: 1513
+
+service_charge_pct = 1513 % 10
+                   = 3
+```
+
+The service charge amount is calculated from total group expenses:
+
+```text
+service_charge_amount =
+    total_expenses * service_charge_pct / 100
+```
+
+For total expenses of `300000.00`, the service charge is `9000.00`.
+
+The percentage is calculated programmatically from the configured username. The fee is reported separately from participant-to-participant transfers.
+
+## Audit Trail
+
+Expense and payment creation generate audit records in the `audit_logs` table. These records capture the event type, group ID, associated entity ID, event details, and creation timestamp.
+
+Audit logging occurs within the corresponding transaction so that an audit event is not committed independently of the expense or payment operation.
+
+## Docker
+
+Build the image from the project root:
+
+```bash
+docker build -t splitbill-api .
+```
+
+Run the container:
+
+```bash
+docker run --rm \
+  --name splitbill-api \
+  -p 4111:4110 \
+  -e DB_URL=jdbc:postgresql://host.docker.internal:5432/splitbill \
+  -e DB_USERNAME=YOUR_POSTGRES_USERNAME \
+  -e DB_PASSWORD=YOUR_POSTGRES_PASSWORD \
+  splitbill-api
+```
+
+Replace the database credential placeholders with your PostgreSQL credentials. If your database uses no password, configure `DB_PASSWORD` accordingly.
+
+The example uses `host.docker.internal` for Docker Desktop on macOS, allowing the container to connect to PostgreSQL running on the host. Ensure PostgreSQL accepts the connection.
+
+The application listens on port `4110` inside the container; the example exposes it on port `4111` on the host.
+
+The multi-stage Dockerfile builds the application using a JDK image and runs it using a smaller JRE image.
+
+## Testing
+
+Run the complete test suite:
+
+```bash
+./mvnw clean test
+```
+
+The project includes tests for service-charge calculation and settlement behavior, including balance calculations, zero-transfer scenarios, and repayment adjustments.
+
+Manual API verification has also been performed for group creation, expense creation, settlement retrieval, repayment recording, and invalid-request handling. The Dockerized settlement endpoint was verified against PostgreSQL.
+
+## Design Decision and Trade-off
+
+All monetary values use `BigDecimal` to avoid binary floating-point precision errors in financial calculations.
+
+For equal splits where the amount cannot be divided evenly to two decimal places, any remaining cents are allocated to the final participant so the recorded shares equal the original expense amount.
+
+Settlement transfers are calculated using a greedy debtor-creditor matching approach. This produces a practical set of transfers, though it does not guarantee a globally optimal solution for every possible transfer-minimization problem.
+
+The service charge is calculated from the configured GitHub username and returned separately from peer-to-peer transfers because the challenge does not specify a recipient for the fee.
+
+Repayments are stored as separate payment records and applied to participant balances during settlement calculation. Expense and payment creation are audited within their respective transactions.
